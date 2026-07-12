@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#eff6ff" />
+      <stop offset="55%" stop-color="#dbeafe" />
+      <stop offset="100%" stop-color="#dcfce7" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#0f766e" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)" />
+  <rect x="88" y="84" width="336" height="344" rx="52" fill="#ffffff" stroke="#bfdbfe" stroke-width="14" />
+  <rect x="126" y="128" width="172" height="22" rx="11" fill="#cbd5e1" />
+  <rect x="126" y="176" width="230" height="18" rx="9" fill="#e2e8f0" />
+  <rect x="126" y="216" width="212" height="18" rx="9" fill="#e2e8f0" />
+  <rect x="126" y="256" width="148" height="18" rx="9" fill="#e2e8f0" />
+  <path d="M320 214c0-30.928 25.072-56 56-56s56 25.072 56 56-25.072 56-56 56c-8.224 0-16.032-1.776-23.064-4.968L314 283.904c-5.856 2.848-12.896-1.408-12.896-7.92v-31.168c11.568-7.296 19-20.16 19-30.816Z" fill="url(#accent)" />
+  <circle cx="376" cy="214" r="16" fill="#ffffff" />
+  <path d="M131 330h250" stroke="#e2e8f0" stroke-width="18" stroke-linecap="round" />
+  <path d="M131 372h174" stroke="#e2e8f0" stroke-width="18" stroke-linecap="round" />
+</svg>
