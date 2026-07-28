@@ -52,5 +52,5 @@ subject = "Reset your Internship OS password"
 content_path = "./supabase/templates/recovery.html"
 
 [auth.sessions]
-timebox = "7d"
+timebox = "168h"
 inactivity_timeout = "24h"
