@@ -1,53 +1,63 @@
-import { NextResponse } from "next/server";
-
+import {
+  apiDataResultResponse,
+  apiErrorResponse,
+  enforceRateLimit,
+  readApiMutation,
+} from "@/lib/api/server";
 import {
   isApplicationStatus,
   isUuid,
-  isValidApplication,
+  parseApplication,
 } from "@/lib/data/application-validation";
 import {
   insertApplication,
   removeApplication,
   saveApplication,
   saveApplicationStatus,
-  type DataResult,
 } from "@/lib/data/applications";
-import type { Application } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-function jsonResult<T>(result: DataResult<T>) {
-  return NextResponse.json(result, { status: result.error ? 400 : 200 });
-}
-
-async function readJson(request: Request): Promise<unknown> {
-  try {
-    return await request.json();
-  } catch {
-    return null;
-  }
-}
-
 export async function POST(request: Request) {
-  const payload = await readJson(request);
-  if (!isValidApplication(payload, false)) {
-    return jsonResult<Application>({ data: null, error: "Application details are invalid." });
+  const parsed = await readApiMutation(request);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "normal");
+  if (limited) return limited;
+  const payload = parseApplication(parsed.data, { requireDatabaseId: false });
+  if (!payload) {
+    return apiErrorResponse(
+      request,
+      "INVALID_REQUEST",
+      "Application details are invalid.",
+      400,
+    );
   }
-
-  return jsonResult(await insertApplication(payload));
+  return apiDataResultResponse(request, insertApplication(payload));
 }
 
 export async function PUT(request: Request) {
-  const payload = await readJson(request);
-  if (!isValidApplication(payload, true)) {
-    return jsonResult<Application>({ data: null, error: "Application details are invalid." });
+  const parsed = await readApiMutation(request);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "normal");
+  if (limited) return limited;
+  const payload = parseApplication(parsed.data, { requireDatabaseId: true });
+  if (!payload) {
+    return apiErrorResponse(
+      request,
+      "INVALID_REQUEST",
+      "Application details are invalid.",
+      400,
+    );
   }
-
-  return jsonResult(await saveApplication(payload));
+  return apiDataResultResponse(request, saveApplication(payload));
 }
 
 export async function PATCH(request: Request) {
-  const payload = await readJson(request);
+  const parsed = await readApiMutation(request);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "normal");
+  if (limited) return limited;
+  const payload = parsed.data;
   if (
     typeof payload !== "object" ||
     payload === null ||
@@ -56,26 +66,37 @@ export async function PATCH(request: Request) {
     !isUuid(payload.applicationId) ||
     !isApplicationStatus(payload.status)
   ) {
-    return jsonResult<Application>({
-      data: null,
-      error: "Application status request is invalid.",
-    });
+    return apiErrorResponse(
+      request,
+      "INVALID_REQUEST",
+      "Application status request is invalid.",
+      400,
+    );
   }
-
-  return jsonResult(await saveApplicationStatus(payload.applicationId, payload.status));
+  return apiDataResultResponse(
+    request,
+    saveApplicationStatus(payload.applicationId, payload.status),
+  );
 }
 
 export async function DELETE(request: Request) {
-  const payload = await readJson(request);
+  const parsed = await readApiMutation(request);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "sensitive");
+  if (limited) return limited;
+  const payload = parsed.data;
   if (
     typeof payload !== "object" ||
     payload === null ||
     !("applicationId" in payload) ||
     !isUuid(payload.applicationId)
   ) {
-    return jsonResult<true>({ data: null, error: "Application delete request is invalid." });
+    return apiErrorResponse(
+      request,
+      "INVALID_REQUEST",
+      "Application delete request is invalid.",
+      400,
+    );
   }
-
-  return jsonResult(await removeApplication(payload.applicationId));
+  return apiDataResultResponse(request, removeApplication(payload.applicationId));
 }
-

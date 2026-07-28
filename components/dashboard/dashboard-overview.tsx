@@ -32,7 +32,7 @@ function EmptyState({ children }: { children: React.ReactNode }) {
 
 export function DashboardOverview({ presentationPreset }: { presentationPreset?: CapturePreset }) {
   const { data, hasHydrated } = useAppData();
-  const { profile, user } = useAuth();
+  const { account, profile } = useAuth();
   const metrics = getDashboardMetrics(data.applications);
   const metricMap = new Map(metrics.stats.map((item) => [item.label, item]));
   const deadlines = getUpcomingDeadlines(data.applications);
@@ -41,7 +41,7 @@ export function DashboardOverview({ presentationPreset }: { presentationPreset?:
   const timeline = getApplicationsOverTime(data.applications);
   const latestGoal = [...data.weeklyGoals].sort((a, b) => b.week.localeCompare(a.week))[0];
   const recentApplications = [...data.applications].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4);
-  const firstName = (profile?.display_name || user?.email?.split("@")[0] || "Operator").split(" ")[0];
+  const firstName = (profile?.display_name || account?.email.split("@")[0] || "Operator").split(" ")[0];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const currentDate = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(new Date());

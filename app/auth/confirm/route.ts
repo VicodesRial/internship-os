@@ -2,6 +2,12 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  createRecoveryMarker,
+  getRecoveryCookieName,
+  getRecoveryCookieOptions,
+  resolveCookieHostname,
+} from "@/lib/security/auth-cookies";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -9,11 +15,20 @@ export async function GET(request: Request) {
   const type = url.searchParams.get("type") as EmailOtpType | null;
 
   if (tokenHash && type) {
-    const supabase = await createClient();
+    const hostname = resolveCookieHostname(url.hostname);
+    const supabase = await createClient(hostname);
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
     if (!error) {
       const next = type === "recovery" ? "/reset-password" : "/";
-      return NextResponse.redirect(new URL(next, url.origin));
+      const response = NextResponse.redirect(new URL(next, url.origin));
+      if (type === "recovery") {
+        response.cookies.set(
+          getRecoveryCookieName(hostname),
+          createRecoveryMarker(),
+          getRecoveryCookieOptions(hostname),
+        );
+      }
+      return response;
     }
   }
 

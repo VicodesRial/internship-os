@@ -1,26 +1,24 @@
 "use client";
 
+import { apiFetch, parseApiResponse } from "@/lib/api/client";
 import type { DataResult } from "@/lib/data/applications";
 import type { DataControlResult, ImportMode } from "@/lib/data/user-data-controls";
 import type { AppDataBackup, AppDataStore } from "@/lib/types";
 
 async function parseResult<T>(response: Response, fallback: string): Promise<DataResult<T>> {
-  try {
-    const result = await response.json() as DataResult<T>;
-    return result.error || result.data !== null ? result : { data: null, error: fallback };
-  } catch { return { data: null, error: fallback }; }
+  return parseApiResponse<T>(response, fallback);
 }
 
 export async function exportUserDataRequest() {
   try {
-    return parseResult<AppDataBackup>(await fetch("/api/data-controls", { cache: "no-store" }), "Unable to export account data.");
+    return parseResult<AppDataBackup>(await apiFetch("/api/data-controls"), "Unable to export account data.");
   } catch { return { data: null, error: "Unable to export account data." } as DataResult<AppDataBackup>; }
 }
 
 export async function importUserDataRequest(backup: AppDataBackup, mode: ImportMode) {
   try {
-    const response = await fetch("/api/data-controls", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+    const response = await apiFetch("/api/data-controls", {
+      method: "POST",
       body: JSON.stringify({ action: "import", backup, mode }),
     });
     return parseResult<DataControlResult>(response, "Unable to import account data.");
@@ -29,8 +27,8 @@ export async function importUserDataRequest(backup: AppDataBackup, mode: ImportM
 
 export async function seedUserDemoDataRequest() {
   try {
-    const response = await fetch("/api/data-controls", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+    const response = await apiFetch("/api/data-controls", {
+      method: "POST",
       body: JSON.stringify({ action: "seed" }),
     });
     return parseResult<DataControlResult>(response, "Unable to seed demo data.");
@@ -42,8 +40,8 @@ export async function replaceUserCollectionRequest(
   records: Array<AppDataStore[keyof AppDataStore][number]>,
 ) {
   try {
-    const response = await fetch("/api/data-controls", {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+    const response = await apiFetch("/api/data-controls", {
+      method: "PUT",
       body: JSON.stringify({ collection, records }),
     });
     return parseResult<DataControlResult>(response, "Unable to import this collection.");
@@ -52,6 +50,12 @@ export async function replaceUserCollectionRequest(
 
 export async function clearUserDataRequest() {
   try {
-    return parseResult<DataControlResult>(await fetch("/api/data-controls", { method: "DELETE" }), "Unable to delete account data.");
+    return parseResult<DataControlResult>(
+      await apiFetch("/api/data-controls", {
+        method: "DELETE",
+        body: JSON.stringify({ action: "clear" }),
+      }),
+      "Unable to delete account data.",
+    );
   } catch { return { data: null, error: "Unable to delete account data." } as DataResult<DataControlResult>; }
 }

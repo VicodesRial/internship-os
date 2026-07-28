@@ -18,6 +18,7 @@ import {
   type ApplicationFilters,
   type ApplicationSortOption,
 } from "@/lib/applications";
+import { getSafeExternalUrl } from "@/lib/external-url";
 import type { Application } from "@/lib/types";
 
 const inputClassName =
@@ -308,11 +309,14 @@ function ApplicationCards({
 }) {
   return (
     <div className={`${viewMode === "cards" ? "grid" : "grid xl:hidden"} gap-4 md:grid-cols-2` }>
-      {applications.map((application) => (
-        <article
-          key={application.id}
-          className="rounded-[1.25rem] border border-slate-200 bg-white p-5 shadow-sm transition-transform hover:-translate-y-0.5"
-        >
+      {applications.map((application) => {
+        const applicationLink = getSafeExternalUrl(application.applicationLink);
+
+        return (
+          <article
+            key={application.id}
+            className="rounded-[1.25rem] border border-slate-200 bg-white p-5 shadow-sm transition-transform hover:-translate-y-0.5"
+          >
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h3 className="text-xl font-semibold tracking-tight text-ink-900">
@@ -395,19 +399,20 @@ function ApplicationCards({
             >
               Delete
             </button>
-            {application.applicationLink ? (
+            {applicationLink ? (
               <a
-                href={application.applicationLink}
+                href={applicationLink}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
               >
                 Open link
               </a>
             ) : null}
           </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -452,8 +457,11 @@ function ApplicationsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {applications.map((application) => (
-              <tr key={application.id} className="align-top text-sm text-ink-700">
+            {applications.map((application) => {
+              const applicationLink = getSafeExternalUrl(application.applicationLink);
+
+              return (
+                <tr key={application.id} className="align-top text-sm text-ink-700">
                 <td className="px-4 py-4 font-semibold text-ink-900">
                   <div className="min-w-[160px]">
                     <div className="font-semibold">{application.company}</div>
@@ -511,11 +519,11 @@ function ApplicationsTable({
                   </p>
                 </td>
                 <td className="px-4 py-4">
-                  {application.applicationLink ? (
+                  {applicationLink ? (
                     <a
-                      href={application.applicationLink}
+                      href={applicationLink}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="text-sm font-semibold text-blue-700 hover:text-blue-800"
                     >
                       View
@@ -542,8 +550,9 @@ function ApplicationsTable({
                     </button>
                   </div>
                 </td>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

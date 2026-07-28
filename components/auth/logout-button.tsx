@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -11,10 +11,13 @@ export function LogoutButton() {
 
   async function handleLogout() {
     setIsPending(true);
-    const { error } = await createClient().auth.signOut();
+    const response = await apiFetch("/api/auth/logout", {
+      body: "{}",
+      method: "POST",
+    });
     setIsPending(false);
 
-    if (!error) {
+    if (response.ok) {
       router.replace("/login?message=signed-out");
       router.refresh();
     }

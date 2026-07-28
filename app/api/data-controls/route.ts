@@ -1,6 +1,16 @@
-import { NextResponse } from "next/server";
-
-import { isValidLegacyData } from "@/lib/data/legacy-migration-validation";
+import {
+  apiDataResultResponse,
+  apiErrorResponse,
+  enforceRateLimit,
+  guardApiRead,
+  readApiMutation,
+} from "@/lib/api/server";
+import { IMPORT_BODY_LIMIT } from "@/lib/api/request-security";
+import { parseLegacyData } from "@/lib/data/legacy-migration-validation";
+import {
+  InputValidationError,
+  normalizeIsoTimestamp,
+} from "@/lib/data/validation";
 import {
   clearUserData,
   exportUserData,
@@ -15,53 +25,114 @@ export const dynamic = "force-dynamic";
 
 const collections: (keyof AppDataStore)[] = ["applications", "targetCompanies", "contacts", "weeklyGoals"];
 
-async function readJson(request: Request): Promise<Record<string, unknown> | null> {
-  try {
-    const payload: unknown = await request.json();
-    return payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
-  } catch { return null; }
+function asRecord(value: unknown) {
+  return value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : null;
 }
 
-function response<T>(result: { data: T | null; error: string | null }) {
-  return NextResponse.json(result, { status: result.error ? 400 : 200 });
-}
-
-export async function GET() {
-  return response(await exportUserData());
+export async function GET(request: Request) {
+  const rejected = guardApiRead(request);
+  if (rejected) return rejected;
+  return apiDataResultResponse(request, exportUserData());
 }
 
 export async function POST(request: Request) {
-  const payload = await readJson(request);
-  if (payload?.action === "seed") return response(await seedUserDemoData());
+  const parsed = await readApiMutation(request, IMPORT_BODY_LIMIT);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "sensitive");
+  if (limited) return limited;
+  const payload = asRecord(parsed.data);
+  if (payload?.action === "seed") {
+    return apiDataResultResponse(request, seedUserDemoData());
+  }
 
-  const backup = payload?.backup;
+  const backup = asRecord(payload?.backup);
   const mode = payload?.mode;
+  let normalizedData: AppDataStore | null = null;
+  let validExportedAt = false;
+  try {
+    normalizedData = parseLegacyData(backup?.data);
+    validExportedAt = Boolean(
+      backup && normalizeIsoTimestamp(backup.exportedAt),
+    );
+  } catch (error) {
+    if (!(error instanceof InputValidationError)) {
+      return apiErrorResponse(
+        request,
+        "INTERNAL_ERROR",
+        "The request could not be completed.",
+        500,
+      );
+    }
+  }
   if (
     payload?.action !== "import" ||
     (mode !== "merge" && mode !== "replace") ||
-    !backup || typeof backup !== "object" ||
-    !("version" in backup) || backup.version !== 1 ||
-    !("exportedAt" in backup) || typeof backup.exportedAt !== "string" ||
-    !("data" in backup) || !isValidLegacyData(backup.data)
+    backup?.version !== 1 ||
+    !validExportedAt ||
+    !normalizedData
   ) {
-    return response({ data: null, error: "Backup is invalid or uses an incompatible schema version." });
+    return apiErrorResponse(
+      request,
+      "INVALID_REQUEST",
+      "Backup is invalid or uses an incompatible schema version.",
+      400,
+    );
   }
-  return response(await importUserData(backup.data, mode as ImportMode));
+  return apiDataResultResponse(
+    request,
+    importUserData(normalizedData, mode as ImportMode),
+  );
 }
 
 export async function PUT(request: Request) {
-  const payload = await readJson(request);
+  const parsed = await readApiMutation(request, IMPORT_BODY_LIMIT);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "sensitive");
+  if (limited) return limited;
+  const payload = asRecord(parsed.data);
   const collection = payload?.collection;
   if (typeof collection !== "string" || !collections.includes(collection as keyof AppDataStore) || !Array.isArray(payload?.records)) {
-    return response({ data: null, error: "Collection import request is invalid." });
+    return apiErrorResponse(
+      request,
+      "INVALID_REQUEST",
+      "Collection import request is invalid.",
+      400,
+    );
   }
-  const candidate = { applications: [], targetCompanies: [], contacts: [], weeklyGoals: [], [collection]: payload.records };
-  if (!isValidLegacyData(candidate)) {
-    return response({ data: null, error: "Collection records are invalid." });
+  const candidate = parseLegacyData({
+    applications: [],
+    targetCompanies: [],
+    contacts: [],
+    weeklyGoals: [],
+    [collection]: payload.records,
+  });
+  if (!candidate) {
+    return apiErrorResponse(
+      request,
+      "INVALID_REQUEST",
+      "Collection records are invalid.",
+      400,
+    );
   }
-  return response(await replaceUserCollection(collection as keyof AppDataStore, payload.records as AppDataStore[keyof AppDataStore]));
+  return apiDataResultResponse(
+    request,
+    replaceUserCollection(
+      collection as keyof AppDataStore,
+      candidate[collection as keyof AppDataStore],
+    ),
+  );
 }
 
-export async function DELETE() {
-  return response(await clearUserData());
+export async function DELETE(request: Request) {
+  const parsed = await readApiMutation(request);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "sensitive");
+  if (limited) return limited;
+  const payload = asRecord(parsed.data);
+  if (payload?.action !== "clear") {
+    return apiErrorResponse(request, "INVALID_REQUEST", "Delete request is invalid.", 400);
+  }
+  return apiDataResultResponse(request, clearUserData());
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { NetworkingFormModal } from "@/components/networking/networking-form-modal";
 import { useAppData } from "@/components/providers/app-data-provider";
+import { getSafeExternalUrl } from "@/lib/external-url";
 import {
   createNetworkingContactFromDraft,
   formatNetworkingDate,
@@ -140,11 +141,14 @@ function NetworkingCards({
 }) {
   return (
     <div className="grid gap-4 xl:hidden">
-      {contacts.map((contact) => (
-        <article
-          key={contact.id}
-          className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm"
-        >
+      {contacts.map((contact) => {
+        const linkedInUrl = getSafeExternalUrl(contact.linkedInUrl);
+
+        return (
+          <article
+            key={contact.id}
+            className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm"
+          >
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h3 className="text-xl font-semibold tracking-tight text-ink-900">
@@ -219,19 +223,20 @@ function NetworkingCards({
             >
               Delete
             </button>
-            {contact.linkedInUrl ? (
+            {linkedInUrl ? (
               <a
-                href={contact.linkedInUrl}
+                href={linkedInUrl}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
               >
                 Open LinkedIn
               </a>
             ) : null}
           </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -266,17 +271,20 @@ function NetworkingTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {contacts.map((contact) => (
-              <tr key={contact.id} className="align-top text-sm text-ink-700">
+            {contacts.map((contact) => {
+              const linkedInUrl = getSafeExternalUrl(contact.linkedInUrl);
+
+              return (
+                <tr key={contact.id} className="align-top text-sm text-ink-700">
                 <td className="px-4 py-4 font-semibold text-ink-900">{contact.name}</td>
                 <td className="px-4 py-4">{contact.company || "Not set"}</td>
                 <td className="px-4 py-4">{contact.role || "Not set"}</td>
                 <td className="px-4 py-4">
-                  {contact.linkedInUrl ? (
+                  {linkedInUrl ? (
                     <a
-                      href={contact.linkedInUrl}
+                      href={linkedInUrl}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="text-sm font-semibold text-blue-700 hover:text-blue-800"
                     >
                       View
@@ -320,8 +328,9 @@ function NetworkingTable({
                     </button>
                   </div>
                 </td>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

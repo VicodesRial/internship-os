@@ -22,6 +22,7 @@ import {
   importCollectionCsv,
   type CsvCollectionKey,
 } from "@/lib/csv";
+import { validateImportFile } from "@/lib/file-validation";
 import { parseAppDataBackup } from "@/lib/storage";
 
 const actionButtonClassName =
@@ -71,7 +72,7 @@ function createCollectionCsvFileName(collectionKey: CsvCollectionKey) {
 
 export function SettingsPanel() {
   const router = useRouter();
-  const { profile, user } = useAuth();
+  const { account, profile } = useAuth();
   const {
     applicationLoadError,
     cloudError,
@@ -144,6 +145,13 @@ export function SettingsPanel() {
     const file = event.target.files?.[0];
 
     if (!file) {
+      return;
+    }
+
+    const fileError = validateImportFile(file, "json");
+    if (fileError) {
+      setFeedback(fileError, "error");
+      event.target.value = "";
       return;
     }
 
@@ -271,7 +279,7 @@ export function SettingsPanel() {
         <form onSubmit={handleProfileSubmit} className="mt-5 grid gap-4 md:grid-cols-2">
           <label className="text-sm font-medium text-ink-700">
             Email
-            <input value={user?.email ?? profile?.email ?? ""} disabled className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-ink-500" />
+            <input value={account?.email ?? profile?.email ?? ""} disabled className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-ink-500" />
           </label>
           <label className="text-sm font-medium text-ink-700">
             Display name
@@ -348,7 +356,7 @@ export function SettingsPanel() {
               <input
                 ref={jsonFileInputRef}
                 type="file"
-                accept="application/json"
+                accept=".json,application/json"
                 className="hidden"
                 onChange={handleImport}
               />
@@ -437,6 +445,14 @@ export function SettingsPanel() {
             const file = event.target.files?.[0];
 
             if (!file || !csvImportCollection) {
+              return;
+            }
+
+            const fileError = validateImportFile(file, "csv");
+            if (fileError) {
+              setFeedback(fileError, "error");
+              setCsvImportCollection(null);
+              event.target.value = "";
               return;
             }
 

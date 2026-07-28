@@ -80,6 +80,14 @@ type ProfileRow = {
   updated_at: string;
 };
 
+type ApiRateLimitRow = {
+  request_count: number;
+  scope: string;
+  updated_at: string;
+  user_id: string;
+  window_started_at: string;
+};
+
 type TableDefinition<Row, Insert, Update> = {
   Insert: Insert;
   Relationships: [];
@@ -92,6 +100,17 @@ export type Database = {
     CompositeTypes: Record<never, never>;
     Enums: Record<never, never>;
     Functions: {
+      consume_api_rate_limit: {
+        Args: {
+          p_scope: string;
+        };
+        Returns: {
+          allowed: boolean;
+          remaining: number;
+          request_limit: number;
+          retry_after_seconds: number;
+        }[];
+      };
       replace_user_data: {
         Args: {
           p_applications: Json;
@@ -103,6 +122,14 @@ export type Database = {
       };
     };
     Tables: {
+      api_rate_limits: TableDefinition<
+        ApiRateLimitRow,
+        Omit<ApiRateLimitRow, "request_count" | "updated_at"> & {
+          request_count?: number;
+          updated_at?: string;
+        },
+        Partial<Omit<ApiRateLimitRow, "scope" | "user_id" | "window_started_at">>
+      >;
       applications: TableDefinition<
         ApplicationRow,
         Omit<ApplicationRow, "created_at" | "id" | "updated_at" | "user_id"> & {

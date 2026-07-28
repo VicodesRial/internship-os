@@ -1,21 +1,33 @@
-import { NextResponse } from "next/server";
-
+import {
+  apiDataResultResponse,
+  apiErrorResponse,
+  enforceRateLimit,
+  readApiMutation,
+} from "@/lib/api/server";
+import { IMPORT_BODY_LIMIT } from "@/lib/api/request-security";
 import { migrateLegacyData } from "@/lib/data/legacy-migration";
-import { isValidLegacyData } from "@/lib/data/legacy-migration-validation";
+import { parseLegacyData } from "@/lib/data/legacy-migration-validation";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  let payload: unknown;
-  try { payload = await request.json(); } catch { payload = null; }
+  const parsed = await readApiMutation(request, IMPORT_BODY_LIMIT);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "sensitive");
+  if (limited) return limited;
+  const payload = parsed.data;
 
-  if (!payload || typeof payload !== "object" || !("data" in payload) || !isValidLegacyData(payload.data)) {
-    return NextResponse.json(
-      { data: null, error: "Legacy browser data is invalid or incompatible." },
-      { status: 400 },
+  const normalized = payload && typeof payload === "object" && "data" in payload
+    ? parseLegacyData(payload.data)
+    : null;
+  if (!normalized) {
+    return apiErrorResponse(
+      request,
+      "INVALID_REQUEST",
+      "Legacy browser data is invalid or incompatible.",
+      400,
     );
   }
 
-  const result = await migrateLegacyData(payload.data);
-  return NextResponse.json(result, { status: result.error ? 400 : 200 });
+  return apiDataResultResponse(request, migrateLegacyData(normalized));
 }

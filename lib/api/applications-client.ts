@@ -2,6 +2,7 @@
 
 import type { DataResult } from "@/lib/data/applications";
 import type { Application, ApplicationStatus } from "@/lib/types";
+import { apiFetch, parseApiResponse } from "@/lib/api/client";
 
 async function sendApplicationRequest<T>(
   method: "DELETE" | "PATCH" | "POST" | "PUT",
@@ -9,15 +10,11 @@ async function sendApplicationRequest<T>(
   fallbackError: string,
 ): Promise<DataResult<T>> {
   try {
-    const response = await fetch("/api/applications", {
+    const response = await apiFetch("/api/applications", {
       method,
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const result = (await response.json()) as DataResult<T>;
-    return result.error || result.data !== null
-      ? result
-      : { data: null, error: fallbackError };
+    return parseApiResponse<T>(response, fallbackError);
   } catch {
     return { data: null, error: fallbackError };
   }
@@ -57,4 +54,3 @@ export function deleteApplicationRequest(applicationId: string) {
     "Unable to delete the application.",
   );
 }
-

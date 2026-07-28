@@ -3,6 +3,12 @@ import {
   interviewStageOptions,
   referralStatusOptions,
 } from "@/lib/applications";
+import {
+  INPUT_LIMITS,
+  InputValidationError,
+  isValidCalendarDate,
+  normalizeIsoTimestamp,
+} from "@/lib/data/validation";
 import { priorityLevelOptions, roleTypeOptions } from "@/lib/target-companies";
 import type {
   AppDataStore,
@@ -121,12 +127,28 @@ const csvColumns = {
   weeklyGoals: weeklyGoalColumns,
 } as const;
 
+const dangerousSpreadsheetCellPattern = /^[=+\-@\t\r]/;
+
+function neutralizeSpreadsheetFormula(value: string) {
+  return dangerousSpreadsheetCellPattern.test(value) ? `\t${value}` : value;
+}
+
+function restoreNeutralizedSpreadsheetFormula(value: string) {
+  const unprefixedValue = value.slice(1);
+  return value.startsWith("\t") &&
+    dangerousSpreadsheetCellPattern.test(unprefixedValue)
+    ? unprefixedValue
+    : value;
+}
+
 function escapeCsvValue(value: string) {
-  if (/["\n,]/.test(value)) {
-    return `"${value.replaceAll('"', '""')}"`;
+  const safeValue = neutralizeSpreadsheetFormula(value);
+
+  if (/["\n,\t\r]/.test(safeValue)) {
+    return `"${safeValue.replaceAll('"', '""')}"`;
   }
 
-  return value;
+  return safeValue;
 }
 
 function serializeCsv(rows: string[][]) {
@@ -225,7 +247,7 @@ function normalizeNullableDate(value: string) {
     return null;
   }
 
-  return /^\d{4}-\d{2}-\d{2}$/.test(trimmedValue) ? trimmedValue : null;
+  return isValidCalendarDate(trimmedValue) ? trimmedValue : null;
 }
 
 function normalizeTimestamp(value: string) {
@@ -235,7 +257,12 @@ function normalizeTimestamp(value: string) {
     return new Date().toISOString();
   }
 
-  return Number.isNaN(Date.parse(trimmedValue)) ? null : trimmedValue;
+  try {
+    return normalizeIsoTimestamp(trimmedValue);
+  } catch (error) {
+    if (error instanceof InputValidationError) return null;
+    throw error;
+  }
 }
 
 function parseBoolean(value: string) {
@@ -279,7 +306,7 @@ function parseEnumValue<T extends string>(value: string, options: readonly T[]) 
 
 function createRowMap(headers: string[], values: string[]) {
   return headers.reduce<ParsedCsvRow>((record, header, index) => {
-    record[header] = values[index] ?? "";
+    record[header] = restoreNeutralizedSpreadsheetFormula(values[index] ?? "");
     return record;
   }, {});
 }
@@ -483,6 +510,12 @@ function parseWeeklyGoals(rows: ParsedCsvRow[]): CsvImportResult<WeeklyGoal> | n
       networkingCompleted < 0 ||
       leetCodeGoal < 0 ||
       leetCodeCompleted < 0 ||
+      applicationGoal > INPUT_LIMITS.count ||
+      applicationsCompleted > INPUT_LIMITS.count ||
+      networkingGoal > INPUT_LIMITS.count ||
+      networkingCompleted > INPUT_LIMITS.count ||
+      leetCodeGoal > INPUT_LIMITS.count ||
+      leetCodeCompleted > INPUT_LIMITS.count ||
       createdAt === null ||
       updatedAt === null
     ) {

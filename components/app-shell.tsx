@@ -25,15 +25,15 @@ function Brand() {
 }
 
 function Profile() {
-  const { isLoading, profile, user } = useAuth();
-  const displayName = profile?.display_name || user?.email?.split("@")[0] || "Operator";
+  const { account, profile } = useAuth();
+  const displayName = profile?.display_name || account?.email.split("@")[0] || "Operator";
   const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
     <div className="flex items-center gap-3 rounded-sm border border-[var(--border)] bg-[var(--card-soft)] p-2.5">
       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-sm border border-[var(--border-strong)] bg-[var(--accent-soft)] font-mono text-[10px] font-semibold text-[var(--accent)]">{initials}</span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-mono text-[11px] font-medium uppercase tracking-wide text-[var(--text)]">{isLoading ? "Resolving session" : displayName}</span>
+        <span className="block truncate font-mono text-[11px] font-medium uppercase tracking-wide text-[var(--text)]">{displayName}</span>
         <span className="block truncate font-mono text-[9px] uppercase text-[var(--muted)]">Cloud authenticated</span>
       </span>
       <LogoutButton />
@@ -45,10 +45,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
-  const { profile, user } = useAuth();
+  const { account, profile } = useAuth();
   const isCaptureRoute = pathname.startsWith("/capture/");
   const isAuthRoute = ["/login", "/signup", "/forgot-password", "/reset-password"].includes(pathname);
-  const displayName = profile?.display_name || user?.email?.split("@")[0] || "Operator";
+  const displayName = profile?.display_name || account?.email.split("@")[0] || "Operator";
   const initials = displayName.slice(0, 2).toUpperCase();
   const activeModule = navLinks.find((link) => link.href === "/" ? pathname === "/" : pathname.startsWith(link.href))?.label ?? "Overview";
 

@@ -243,6 +243,7 @@ export function AppDataProvider({
     importBackupJson: (input) => {
       const imported = importAppData(input);
       if (!imported) return false;
+      setData(imported);
       saveStoredAppData(imported);
       return true;
     },
@@ -251,8 +252,13 @@ export function AppDataProvider({
     moduleLoadErrors,
     recordCounts: countRecords(data),
     // Phase 7 will turn bulk replacement/reset into authenticated database operations.
-    replaceData: (nextData) => saveStoredAppData(nextData),
-    resetToDemoData: () => { resetStoredAppData(); },
+    replaceData: (nextData) => {
+      setData(nextData);
+      saveStoredAppData(nextData);
+    },
+    resetToDemoData: () => {
+      setData(resetStoredAppData());
+    },
     storageKey: APP_DATA_STORAGE_KEY,
     storageSource: "cloud",
     updateApplication: async (application) => {

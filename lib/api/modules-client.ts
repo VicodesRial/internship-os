@@ -3,18 +3,17 @@
 import type { DataResult } from "@/lib/data/applications";
 import type { ModuleResource } from "@/lib/data/modules";
 import type { NetworkingContact, TargetCompany, WeeklyGoal } from "@/lib/types";
+import { apiFetch, parseApiResponse } from "@/lib/api/client";
 
 export type ModuleRecord = NetworkingContact | TargetCompany | WeeklyGoal;
 
 async function send<T>(method: "DELETE" | "POST" | "PUT", body: unknown, fallback: string): Promise<DataResult<T>> {
   try {
-    const response = await fetch("/api/modules", {
+    const response = await apiFetch("/api/modules", {
       method,
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const result = await response.json() as DataResult<T>;
-    return result.error || result.data !== null ? result : { data: null, error: fallback };
+    return parseApiResponse<T>(response, fallback);
   } catch { return { data: null, error: fallback }; }
 }
 

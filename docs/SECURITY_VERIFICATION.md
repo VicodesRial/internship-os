@@ -5,7 +5,12 @@ Run this checklist against the production candidate after all migrations are app
 ## Automated project checks
 
 ```bash
+npm test
+npx supabase start
+npm run test:db
+npx supabase stop --no-backup
 npm run typecheck
+npm audit --omit=dev --audit-level=high
 npm run build
 ```
 
@@ -55,22 +60,21 @@ While logged in as User B:
 
 - Attempting to update or delete a known User A record ID through a direct API request must not alter User A’s row.
 - Requests must never accept a browser-supplied `user_id` as ownership authority.
+- Cross-origin, missing-CSRF, non-JSON, and oversized mutation requests must return `403`, `415`, or `413` without modifying data.
+- API failures must contain a request ID and must not contain database messages or stack traces.
+- The 61st normal mutation in one minute and 11th sensitive mutation in one hour must return `429`.
 
 ## Database verification
 
 In Supabase SQL Editor, verify RLS remains enabled:
 
 ```sql
-select relname, relrowsecurity
-from pg_class
-where relname in (
-  'profiles',
-  'applications',
-  'target_companies',
-  'networking_contacts',
-  'weekly_goals'
-)
-order by relname;
+select n.nspname as schema_name, c.relname as table_name, c.relrowsecurity
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relkind in ('r', 'p')
+order by c.relname;
 ```
 
 Every result must have `relrowsecurity = true`.
@@ -95,6 +99,42 @@ Each user-owned table must have authenticated select, insert, update, and delete
 5. Seed demo data and verify only the active account changes.
 6. Delete tracker data and verify the account remains usable while its four collections become empty.
 7. Repeat a check as User B to prove User A’s destructive actions had no effect on User B.
+
+## Input, upload, and CSV safety
+
+1. Select an empty JSON file, an empty CSV file, and a file larger than 1 MB.
+   Each must be rejected before an import confirmation appears.
+2. Rename a non-JSON file to `.json` and a non-CSV file to `.csv`. Invalid
+   content must still fail schema validation and must not alter data.
+3. Import impossible dates such as `2026-02-31`, counts below `0` or above
+   `10000`, and over-limit text. Each request must return `400`.
+4. Export records whose first character is `=`, `+`, `-`, `@`, a tab, or a
+   carriage return. Opening the CSV in spreadsheet software must show text and
+   must not execute a formula.
+5. Confirm names and single-line fields collapse control characters and extra
+   whitespace while notes preserve ordinary line breaks.
+
+## Headers and runtime logs
+
+Inspect the production response:
+
+```bash
+curl -sSI https://YOUR_PRODUCTION_HOST/login
+```
+
+- `Content-Security-Policy` must contain a nonce, `frame-ancestors 'none'`,
+  Supabase connectivity, and Cloudflare Turnstile script/frame access.
+- Production CSP must not contain `unsafe-eval`.
+- `Strict-Transport-Security`, `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, the strict referrer policy, and the
+  restrictive permissions policy must be present.
+- API responses must include `Cache-Control: no-store` and `X-Request-Id`.
+
+In Vercel Runtime Logs, verify success and failure records are valid JSON and
+contain only timestamp, level, event, request ID, method, fixed API route,
+status, duration, pseudonymous user reference, and safe error code. Search for
+test email addresses, passwords, bearer tokens, cookies, notes, application
+links, and Turnstile tokens; none may appear.
 
 ## Legacy migration
 

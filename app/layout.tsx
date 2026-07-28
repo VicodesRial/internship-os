@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Silkscreen } from "next/font/google";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 
 import "./globals.css";
@@ -54,6 +55,7 @@ type RootLayoutProps = {
 };
 
 export default async function RootLayout({ children }: RootLayoutProps) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   const authState = await getCurrentAuthState();
   const [applicationResult, targetCompanyResult, contactResult, weeklyGoalResult] =
     authState.user
@@ -78,6 +80,8 @@ export default async function RootLayout({ children }: RootLayoutProps) {
     >
       <head>
         <script
+          nonce={nonce}
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html:
               "try{document.documentElement.classList.toggle('dark',localStorage.getItem('internship-os-theme')!=='light')}catch(e){document.documentElement.classList.add('dark')}",
@@ -87,8 +91,13 @@ export default async function RootLayout({ children }: RootLayoutProps) {
       <body>
         <AuthProvider
           configured={authState.configured}
+          nonce={nonce}
+          initialAccount={
+            authState.user?.email
+              ? { email: authState.user.email, id: authState.user.id }
+              : null
+          }
           initialProfile={authState.profile}
-          initialUser={authState.user}
         >
           <AppDataProvider
             initialApplications={applicationResult.data ?? []}

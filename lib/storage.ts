@@ -1,5 +1,6 @@
 import { createDemoData } from "@/lib/demo-data";
-import { isValidLegacyData } from "@/lib/data/legacy-migration-validation";
+import { parseLegacyData } from "@/lib/data/legacy-migration-validation";
+import { normalizeIsoTimestamp } from "@/lib/data/validation";
 import type { AppDataBackup, AppDataStore, AppRecordCounts } from "@/lib/types";
 
 export const APP_DATA_STORAGE_KEY = "internship-tracker-data";
@@ -7,31 +8,6 @@ export const APP_DATA_BACKUP_VERSION = 1;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function isAppDataStore(value: unknown): value is AppDataStore {
-  if (!isObject(value)) {
-    return false;
-  }
-
-  return (
-    Array.isArray(value.applications) &&
-    Array.isArray(value.targetCompanies) &&
-    Array.isArray(value.contacts) &&
-    Array.isArray(value.weeklyGoals)
-  );
-}
-
-function isAppDataBackup(value: unknown): value is AppDataBackup {
-  if (!isObject(value)) {
-    return false;
-  }
-
-  return (
-    value.version === APP_DATA_BACKUP_VERSION &&
-    typeof value.exportedAt === "string" &&
-    isAppDataStore(value.data)
-  );
 }
 
 function isBrowser() {
@@ -79,8 +55,9 @@ function withoutUnchangedDemoRecords(data: AppDataStore): AppDataStore {
 }
 
 export function getMeaningfulLegacyData(payload: unknown): AppDataStore | null {
-  if (!isValidLegacyData(payload)) return null;
-  const meaningfulData = withoutUnchangedDemoRecords(payload);
+  const parsed = parseLegacyData(payload);
+  if (!parsed) return null;
+  const meaningfulData = withoutUnchangedDemoRecords(parsed);
   return Object.values(countRecords(meaningfulData)).some((count) => count > 0)
     ? meaningfulData
     : null;
@@ -115,8 +92,12 @@ export function serializeAppDataBackup(backup: AppDataBackup): string {
 export function parseAppDataBackup(input: string): AppDataBackup | null {
   try {
     const parsed: unknown = JSON.parse(input);
-
-    return isAppDataBackup(parsed) ? parsed : null;
+    if (!isObject(parsed) || parsed.version !== APP_DATA_BACKUP_VERSION) {
+      return null;
+    }
+    const data = parseLegacyData(parsed.data);
+    const exportedAt = normalizeIsoTimestamp(parsed.exportedAt);
+    return data ? { version: APP_DATA_BACKUP_VERSION, exportedAt, data } : null;
   } catch {
     return null;
   }

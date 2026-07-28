@@ -1,24 +1,19 @@
 "use client";
 
-import type { User } from "@supabase/supabase-js";
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
 import type { ProfileDatabaseRow } from "@/lib/database.types";
-import { createClient } from "@/lib/supabase/client";
 
-type BrowserSupabaseClient = ReturnType<typeof createClient>;
+export type AccountIdentity = {
+  email: string;
+  id: string;
+};
 
 type AuthContextValue = {
+  account: AccountIdentity | null;
   configured: boolean;
-  isLoading: boolean;
+  nonce: string | undefined;
   profile: ProfileDatabaseRow | null;
-  user: User | null;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -26,43 +21,25 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({
   children,
   configured,
+  initialAccount,
   initialProfile,
-  initialUser,
+  nonce,
 }: {
   children: ReactNode;
   configured: boolean;
+  initialAccount: AccountIdentity | null;
   initialProfile: ProfileDatabaseRow | null;
-  initialUser: User | null;
+  nonce: string | undefined;
 }) {
-  const [user, setUser] = useState<User | null>(initialUser);
-  const [profile, setProfile] = useState<ProfileDatabaseRow | null>(initialProfile);
-  const [isLoading, setIsLoading] = useState(false);
-  const [supabase, setSupabase] = useState<BrowserSupabaseClient | null>(null);
-
-  useEffect(() => {
-    setSupabase(configured ? createClient() : null);
-  }, [configured]);
-
-  useEffect(() => {
-    setUser(initialUser);
-    setProfile(initialProfile);
-    setIsLoading(false);
-  }, [initialProfile, initialUser]);
-
-  useEffect(() => {
-    if (!supabase) return;
-
-    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-      setIsLoading(false);
-      setUser(session?.user ?? null);
-      if (!session?.user) setProfile(null);
-    });
-
-    return () => subscription.subscription.unsubscribe();
-  }, [supabase]);
-
   return (
-    <AuthContext.Provider value={{ configured, isLoading, profile, user }}>
+    <AuthContext.Provider
+      value={{
+        account: initialAccount,
+        configured,
+        nonce,
+        profile: initialProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

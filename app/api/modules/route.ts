@@ -1,7 +1,19 @@
-import { NextResponse } from "next/server";
-
+import {
+  apiDataResultResponse,
+  apiErrorResponse,
+  enforceRateLimit,
+  readApiMutation,
+} from "@/lib/api/server";
 import { isUuid } from "@/lib/data/application-validation";
-import { isModuleResource, isValidModuleRecord } from "@/lib/data/module-validation";
+import {
+  isModuleResource,
+  parseModuleRecord,
+} from "@/lib/data/module-validation";
+import {
+  INPUT_LIMITS,
+  InputValidationError,
+  normalizeSingleLineText,
+} from "@/lib/data/validation";
 import {
   createModuleRecord,
   deleteModuleRecord,
@@ -9,46 +21,91 @@ import {
   updateProfile,
   type ModuleRecord,
 } from "@/lib/data/modules";
-import type { DataResult } from "@/lib/data/applications";
 
 export const dynamic = "force-dynamic";
 
-function jsonResult<T>(result: DataResult<T>) {
-  return NextResponse.json(result, { status: result.error ? 400 : 200 });
-}
-
-async function readJson(request: Request): Promise<Record<string, unknown> | null> {
-  try {
-    const value: unknown = await request.json();
-    return value && typeof value === "object" ? value as Record<string, unknown> : null;
-  } catch { return null; }
+function asRecord(value: unknown) {
+  return value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : null;
 }
 
 export async function POST(request: Request) {
-  const payload = await readJson(request);
-  if (!payload || !isModuleResource(payload.resource) || !isValidModuleRecord(payload.resource, payload.record, false)) {
-    return jsonResult({ data: null, error: "Record details are invalid." });
+  const parsed = await readApiMutation(request);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "normal");
+  if (limited) return limited;
+  const payload = asRecord(parsed.data);
+  if (!payload || !isModuleResource(payload.resource)) {
+    return apiErrorResponse(request, "INVALID_REQUEST", "Record details are invalid.", 400);
   }
-  return jsonResult(await createModuleRecord(payload.resource, payload.record as ModuleRecord));
+  const record = parseModuleRecord(payload.resource, payload.record, {
+    requireDatabaseId: false,
+  });
+  if (!record) {
+    return apiErrorResponse(request, "INVALID_REQUEST", "Record details are invalid.", 400);
+  }
+  return apiDataResultResponse(
+    request,
+    createModuleRecord(payload.resource, record as ModuleRecord),
+  );
 }
 
 export async function PUT(request: Request) {
-  const payload = await readJson(request);
+  const parsed = await readApiMutation(request);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "normal");
+  if (limited) return limited;
+  const payload = asRecord(parsed.data);
   if (payload?.resource === "profile") {
-    return typeof payload.displayName === "string" && payload.displayName.length <= 100
-      ? jsonResult(await updateProfile(payload.displayName))
-      : jsonResult({ data: null, error: "Display name is invalid." });
+    try {
+      const displayName = normalizeSingleLineText(
+        payload.displayName,
+        INPUT_LIMITS.name,
+      );
+      return apiDataResultResponse(request, updateProfile(displayName));
+    } catch (error) {
+      return error instanceof InputValidationError
+        ? apiErrorResponse(
+            request,
+            "INVALID_REQUEST",
+            "Display name is invalid.",
+            400,
+          )
+        : apiErrorResponse(
+            request,
+            "INTERNAL_ERROR",
+            "The request could not be completed.",
+            500,
+          );
+    }
   }
-  if (!payload || !isModuleResource(payload.resource) || !isValidModuleRecord(payload.resource, payload.record, true)) {
-    return jsonResult({ data: null, error: "Record details are invalid." });
+  if (!payload || !isModuleResource(payload.resource)) {
+    return apiErrorResponse(request, "INVALID_REQUEST", "Record details are invalid.", 400);
   }
-  return jsonResult(await updateModuleRecord(payload.resource, payload.record as ModuleRecord));
+  const record = parseModuleRecord(payload.resource, payload.record, {
+    requireDatabaseId: true,
+  });
+  if (!record) {
+    return apiErrorResponse(request, "INVALID_REQUEST", "Record details are invalid.", 400);
+  }
+  return apiDataResultResponse(
+    request,
+    updateModuleRecord(payload.resource, record as ModuleRecord),
+  );
 }
 
 export async function DELETE(request: Request) {
-  const payload = await readJson(request);
+  const parsed = await readApiMutation(request);
+  if (parsed.response) return parsed.response;
+  const limited = await enforceRateLimit(request, "sensitive");
+  if (limited) return limited;
+  const payload = asRecord(parsed.data);
   if (!payload || !isModuleResource(payload.resource) || !isUuid(payload.id)) {
-    return jsonResult({ data: null, error: "Delete request is invalid." });
+    return apiErrorResponse(request, "INVALID_REQUEST", "Delete request is invalid.", 400);
   }
-  return jsonResult(await deleteModuleRecord(payload.resource, payload.id));
+  return apiDataResultResponse(
+    request,
+    deleteModuleRecord(payload.resource, payload.id),
+  );
 }

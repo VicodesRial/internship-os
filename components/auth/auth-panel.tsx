@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import {
+  TurnstileWidget,
+  type TurnstileWidgetHandle,
+} from "@/components/auth/turnstile-widget";
 import { useAuth } from "@/components/providers/auth-provider";
-import { createClient } from "@/lib/supabase/client";
+import { apiFetch, parseApiResponse } from "@/lib/api/client";
+import { MINIMUM_PASSWORD_LENGTH } from "@/lib/auth/requests";
+import { getPublicTurnstileSiteKey } from "@/lib/env";
 
 type AuthMode = "forgot" | "login" | "reset" | "signup";
 
@@ -49,22 +55,21 @@ function getInitialMessage() {
   return null;
 }
 
-function getSafeNextPath() {
-  const value = new URLSearchParams(window.location.search).get("next");
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/";
-}
-
 export function AuthPanel({ mode }: { mode: AuthMode }) {
   const router = useRouter();
-  const { configured } = useAuth();
+  const { configured, nonce } = useAuth();
+  const turnstileRef = useRef<TurnstileWidgetHandle>(null);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackTone, setFeedbackTone] = useState<"error" | "success">("error");
   const [isPending, setIsPending] = useState(false);
   const pageContent = content[mode];
+  const siteKey = getPublicTurnstileSiteKey();
+  const requiresCaptcha = mode !== "reset";
 
   useEffect(() => {
     const initialMessage = getInitialMessage();
@@ -90,49 +95,81 @@ export function AuthPanel({ mode }: { mode: AuthMode }) {
       return;
     }
 
-    if ((mode === "signup" || mode === "reset") && password.length < 8) {
-      setFeedback("Password must contain at least 8 characters.");
+    if (
+      (mode === "signup" || mode === "reset") &&
+      password.length < MINIMUM_PASSWORD_LENGTH
+    ) {
+      setFeedback(
+        `Password must contain at least ${MINIMUM_PASSWORD_LENGTH} characters.`,
+      );
+      return;
+    }
+
+    if (requiresCaptcha && !captchaToken) {
+      setFeedback("Complete the bot verification before continuing.");
       return;
     }
 
     setIsPending(true);
-    const supabase = createClient();
 
     try {
       if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        router.replace(getSafeNextPath());
+        const response = await apiFetch("/api/auth/login", {
+          body: JSON.stringify({
+            captchaToken,
+            email,
+            next: new URLSearchParams(window.location.search).get("next"),
+            password,
+          }),
+          method: "POST",
+        });
+        const result = await parseApiResponse<{ redirectTo: string }>(
+          response,
+          "Authentication failed.",
+        );
+        if (result.error || !result.data) {
+          throw new Error(result.error ?? "Authentication failed.");
+        }
+        router.replace(result.data.redirectTo);
         router.refresh();
       } else if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { display_name: displayName.trim() || email.split("@")[0] },
-            emailRedirectTo: `${window.location.origin}/auth/callback?next=/`,
-          },
+        const response = await apiFetch("/api/auth/signup", {
+          body: JSON.stringify({ captchaToken, displayName, email, password }),
+          method: "POST",
         });
-        if (error) throw error;
-
-        if (data.session) {
-          router.replace("/");
-          router.refresh();
-        } else {
-          setFeedbackTone("success");
-          setFeedback("Account created. Check your email to confirm access.");
+        const result = await parseApiResponse<{ message: string }>(
+          response,
+          "Registration could not be completed.",
+        );
+        if (result.error || !result.data) {
+          throw new Error(result.error ?? "Registration could not be completed.");
         }
-      } else if (mode === "forgot") {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
-        });
-        if (error) throw error;
         setFeedbackTone("success");
-        setFeedback("Recovery link transmitted. Check your email.");
+        setFeedback(result.data.message);
+      } else if (mode === "forgot") {
+        const response = await apiFetch("/api/auth/recovery", {
+          body: JSON.stringify({ captchaToken, email }),
+          method: "POST",
+        });
+        const result = await parseApiResponse<{ message: string }>(
+          response,
+          "Recovery could not be started.",
+        );
+        if (result.error || !result.data) {
+          throw new Error(result.error ?? "Recovery could not be started.");
+        }
+        setFeedbackTone("success");
+        setFeedback(result.data.message);
       } else {
-        const { error } = await supabase.auth.updateUser({ password });
-        if (error) throw error;
-        await supabase.auth.signOut();
+        const response = await apiFetch("/api/auth/password", {
+          body: JSON.stringify({ password }),
+          method: "POST",
+        });
+        const result = await parseApiResponse<{ updated: boolean }>(
+          response,
+          "Password update failed.",
+        );
+        if (result.error) throw new Error(result.error);
         router.replace("/login?message=password-updated");
         router.refresh();
       }
@@ -140,6 +177,7 @@ export function AuthPanel({ mode }: { mode: AuthMode }) {
       setFeedbackTone("error");
       setFeedback(error instanceof Error ? error.message : "Authentication request failed.");
     } finally {
+      if (requiresCaptcha) turnstileRef.current?.reset();
       setIsPending(false);
     }
   }
@@ -189,7 +227,7 @@ export function AuthPanel({ mode }: { mode: AuthMode }) {
             <input
               required
               type="password"
-              minLength={mode === "login" ? 6 : 8}
+              minLength={mode === "login" ? 1 : MINIMUM_PASSWORD_LENGTH}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
@@ -205,7 +243,7 @@ export function AuthPanel({ mode }: { mode: AuthMode }) {
             <input
               required
               type="password"
-              minLength={8}
+              minLength={MINIMUM_PASSWORD_LENGTH}
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               autoComplete="new-password"
@@ -213,6 +251,15 @@ export function AuthPanel({ mode }: { mode: AuthMode }) {
               placeholder="••••••••"
             />
           </label>
+        ) : null}
+
+        {requiresCaptcha && siteKey ? (
+          <TurnstileWidget
+            ref={turnstileRef}
+            nonce={nonce}
+            siteKey={siteKey}
+            onTokenChange={setCaptchaToken}
+          />
         ) : null}
 
         {feedback ? (
@@ -231,7 +278,11 @@ export function AuthPanel({ mode }: { mode: AuthMode }) {
 
         <button
           type="submit"
-          disabled={isPending || !configured}
+          disabled={
+            isPending ||
+            !configured ||
+            (requiresCaptcha && (!siteKey || !captchaToken))
+          }
           className="command-button w-full border-[var(--accent)] bg-[#234e78] text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending

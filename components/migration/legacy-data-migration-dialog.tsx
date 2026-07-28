@@ -19,7 +19,7 @@ type SuccessState = { alreadyMigrated: boolean; counts: AppRecordCounts };
 
 export function LegacyDataMigrationDialog() {
   const router = useRouter();
-  const { isLoading, profile, user } = useAuth();
+  const { account, profile } = useAuth();
   const checkedPayloadRef = useRef<string | null>(null);
   const [legacyData, setLegacyData] = useState<AppDataStore | null>(null);
   const [hasLegacyCopy, setHasLegacyCopy] = useState(false);
@@ -31,14 +31,14 @@ export function LegacyDataMigrationDialog() {
   const [dismissalKey, setDismissalKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isLoading || !user || !profile || profile.legacy_migrated_at) return;
+    if (!account || !profile || profile.legacy_migrated_at) return;
     if (!hasStoredAppData()) return;
     const stored = loadStoredAppData();
     const meaningfulData = getMeaningfulLegacyData(stored);
     if (!meaningfulData) return;
 
     const fingerprint = createLegacyDataFingerprint(meaningfulData);
-    const nextDismissalKey = `internship-os-legacy-migration-dismissed:${user.id}:${fingerprint}`;
+    const nextDismissalKey = `internship-os-legacy-migration-dismissed:${account.id}:${fingerprint}`;
     if (window.localStorage.getItem(nextDismissalKey) === "true") return;
     if (checkedPayloadRef.current === nextDismissalKey) return;
     checkedPayloadRef.current = nextDismissalKey;
@@ -48,9 +48,9 @@ export function LegacyDataMigrationDialog() {
     setDismissalKey(nextDismissalKey);
     setError(null);
     setIsOpen(true);
-  }, [isLoading, profile, user]);
+  }, [account, profile]);
 
-  if (!isOpen || !user || !hasLegacyCopy) return null;
+  if (!isOpen || !account || !hasLegacyCopy) return null;
 
   const counts = legacyData
     ? countRecords(legacyData)
@@ -111,7 +111,7 @@ export function LegacyDataMigrationDialog() {
         ) : (
           <div className="mt-5 space-y-5">
             <p className="text-sm leading-6 text-ink-600">
-              Internship OS found a legacy dataset saved in this browser. Nothing will be uploaded unless you confirm. Imported records belong only to <span className="font-semibold text-ink-900">{user.email}</span>.
+              Internship OS found a legacy dataset saved in this browser. Nothing will be uploaded unless you confirm. Imported records belong only to <span className="font-semibold text-ink-900">{account.email}</span>.
             </p>
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -131,7 +131,7 @@ export function LegacyDataMigrationDialog() {
             </label>
 
             <div className="flex flex-col gap-2 sm:flex-row">
-              <button type="button" onClick={importLegacyData} disabled={isImporting || Boolean(error) || totalRecords === 0} className="font-pixel-label rounded-sm bg-[var(--accent)] px-4 py-3 text-[9px] uppercase text-white disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="button" onClick={importLegacyData} disabled={isImporting || totalRecords === 0} className="font-pixel-label rounded-sm bg-[var(--accent)] px-4 py-3 text-[9px] uppercase text-white disabled:cursor-not-allowed disabled:opacity-50">
                 {isImporting ? "Importing..." : `Import ${totalRecords} records`}
               </button>
               <button type="button" onClick={dismissLegacyData} disabled={isImporting} className="font-pixel-label rounded-sm border border-[var(--border)] px-4 py-3 text-[9px] uppercase text-ink-600 disabled:opacity-50">

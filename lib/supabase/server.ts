@@ -3,12 +3,18 @@ import { cookies } from "next/headers";
 
 import type { Database } from "@/lib/database.types";
 import { getPublicSupabaseEnv } from "@/lib/env";
+import {
+  getAuthCookieOptions,
+  resolveCookieHostname,
+} from "@/lib/security/auth-cookies";
 
-export async function createClient() {
+export async function createClient(requestHostname?: string) {
   const cookieStore = await cookies();
-  const { anonKey, url } = getPublicSupabaseEnv();
+  const { publishableKey, url } = getPublicSupabaseEnv();
+  const hostname = resolveCookieHostname(requestHostname);
 
-  return createServerClient<Database>(url, anonKey, {
+  return createServerClient<Database>(url, publishableKey, {
+    cookieOptions: getAuthCookieOptions(hostname),
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -25,4 +31,3 @@ export async function createClient() {
     },
   });
 }
-
