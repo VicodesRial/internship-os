@@ -17,6 +17,7 @@ vi.mock("@/lib/supabase/server", () => ({
 import { POST as login } from "@/app/api/auth/login/route";
 import { POST as password } from "@/app/api/auth/password/route";
 import { POST as recovery } from "@/app/api/auth/recovery/route";
+import { GET as confirm } from "@/app/auth/confirm/route";
 
 const ORIGIN = "http://localhost:3000";
 const CSRF_TOKEN = "a".repeat(64);
@@ -140,5 +141,63 @@ describe("server authentication routes", () => {
       }),
     );
     expect(reused.status).toBe(403);
+  });
+
+  it("accepts a fresh recovery PKCE code from the default email template", async () => {
+    const exchangeCodeForSession = vi.fn().mockResolvedValue({
+      data: {
+        user: {
+          recovery_sent_at: new Date(Date.now() - 60_000).toISOString(),
+        },
+      },
+      error: null,
+    });
+    createClientMock.mockResolvedValue({
+      auth: {
+        exchangeCodeForSession,
+        signOut: vi.fn(),
+      },
+    });
+
+    const response = await confirm(
+      new Request(`${ORIGIN}/auth/confirm?code=recovery-code`),
+    );
+
+    expect(exchangeCodeForSession).toHaveBeenCalledWith("recovery-code");
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/reset-password`);
+    expect(
+      response.cookies.get(getRecoveryCookieName("localhost"))?.value,
+    ).toHaveLength(43);
+  });
+
+  it("rejects a stale or non-recovery PKCE code and clears its session", async () => {
+    const signOut = vi.fn().mockResolvedValue({ error: null });
+    createClientMock.mockResolvedValue({
+      auth: {
+        exchangeCodeForSession: vi.fn().mockResolvedValue({
+          data: {
+            user: {
+              recovery_sent_at: new Date(
+                Date.now() - 31 * 60_000,
+              ).toISOString(),
+            },
+          },
+          error: null,
+        }),
+        signOut,
+      },
+    });
+
+    const response = await confirm(
+      new Request(`${ORIGIN}/auth/confirm?code=stale-code`),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      `${ORIGIN}/login?error=confirmation-failed`,
+    );
+    expect(response.cookies.get(getRecoveryCookieName("localhost"))).toBeUndefined();
+    expect(signOut).toHaveBeenCalledOnce();
   });
 });

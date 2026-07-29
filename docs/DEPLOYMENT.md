@@ -30,20 +30,24 @@ The migrations create the profile trigger, user-owned tables, indexes, `updated_
 
 In Supabase Dashboard, open Authentication > URL Configuration.
 
-- Site URL: the canonical production URL, such as `https://internship-os.example.com`
+- Site URL: the canonical production URL,
+  `https://internship-os.vercel.app`
 - Additional redirect URLs:
   - `http://localhost:3000/**`
-  - `https://YOUR_PRODUCTION_PROJECT.vercel.app/**`
+  - `https://internship-os.vercel.app/**`
   - `https://*-YOUR_TEAM_OR_ACCOUNT.vercel.app/**` if Vercel previews must support Auth
 
 The wildcard preview pattern should be scoped to your Vercel team or account, not a global `vercel.app` wildcard. See Supabase’s [redirect URL guidance](https://supabase.com/docs/guides/auth/redirect-urls).
 
-Enable email confirmation and install the recovery template from
-`supabase/templates/recovery.html`. The verified recovery flow enters through
-`/auth/confirm`; ordinary confirmation and PKCE callbacks use `/auth/callback`.
-Apply every Auth control in [AUTH_SECURITY.md](AUTH_SECURITY.md), including the
-seven-day session time-box, 24-hour inactivity timeout, and 30-minute recovery
-expiry.
+Enable email confirmation. The default Supabase recovery email uses PKCE and
+returns through `/auth/confirm`; the route validates that the exchanged session
+has a fresh recovery timestamp. If custom SMTP is later configured, install the
+token-hash template from `supabase/templates/recovery.html`. Ordinary
+confirmation and PKCE callbacks use `/auth/callback`.
+Apply every available Auth control in
+[AUTH_SECURITY.md](AUTH_SECURITY.md). The seven-day session time-box,
+24-hour inactivity timeout, and leaked-password checks remain deferred while
+the project is on Supabase Free.
 
 ## 4. Create the Vercel project
 
@@ -57,7 +61,7 @@ Vercel automatically applies the appropriate Next.js build defaults; see [Vercel
 
 ## 5. Configure Vercel environment variables
 
-Add these variables to Production and Preview:
+Add these variables to each deployable environment:
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL
@@ -76,14 +80,18 @@ Variables](https://vercel.com/docs/environment-variables).
 Turnstile site key is public; its secret belongs only in Supabase Auth. Never
 add a Turnstile secret or Supabase service-role key to Vercel.
 
-For stronger preview isolation, use a separate Supabase project for previews and configure branch-specific Preview variables. If previews use production Supabase, preview users and test writes operate against production data even though RLS still isolates accounts.
+Use a separate Supabase project for previews and configure branch-specific
+Preview variables. The current project deliberately scopes all four variables
+to Production, so Preview deployments fail closed instead of connecting to
+production data.
 
 ## 6. Deploy
 
 Trigger a Vercel deployment from the production branch. Verify that the build
 completes and that the deployment has all required environment variables. Add
-and publish the ordered Vercel WAF rules from
-[AUTH_SECURITY.md](AUTH_SECURITY.md) after validating them in log mode.
+and publish the available Vercel WAF rules from
+[AUTH_SECURITY.md](AUTH_SECURITY.md). The current Hobby release uses its one
+available rule for login.
 
 ## 7. Production smoke test
 

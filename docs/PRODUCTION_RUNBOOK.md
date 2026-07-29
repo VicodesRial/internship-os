@@ -13,14 +13,27 @@ As of July 28, 2026:
 - Supabase state: active and healthy on the Free tier
 - Supabase project paused to free the slot: `VicodesRial's Project`
 - Database security migrations: applied and verified
+- Supabase Auth: email confirmation, 12-character passwords, 30-minute OTP
+  expiry, secure password changes, one-hour JWTs, and Turnstile enabled
 - Vercel team: `Internship OS`
-- Vercel project: not created
+- Vercel project: `internship-os`
+- Production origin: `https://internship-os.vercel.app`
+- Production deployment: healthy
+- Vercel environment: four required variables scoped to Production only
+- Cloudflare Turnstile: managed widget restricted to
+  `internship-os.vercel.app`
+- Vercel Firewall: active; login rate limit published at 10 requests per
+  10 minutes per IP with HTTP 429
+- GitHub `main`: protected by required `verify`, `database`, and `gitleaks`
+  checks
 - Custom domain: not configured; launch uses the canonical Vercel domain
 
 The initial release remains on Supabase Free by operator choice. Managed daily
 backups, seven-day retention, restore drills, leaked-password protection, and
-paid network controls are not release claims. Treat them as deferred controls
-until a dedicated production organization is upgraded.
+paid network controls are not release claims. Vercel Hobby also permits only
+one rate-limit rule, so signup, recovery, and general API WAF rules remain
+deferred. Treat every unavailable control as deferred until the relevant
+provider is upgraded.
 
 ## Supabase release gate
 
@@ -56,12 +69,15 @@ npx supabase db push
    `docs/AUTH_SECURITY.md`.
 10. Record paid-only SSL/network restrictions and leaked-password protection as
     deferred until upgrade; do not report them as enabled.
+11. Expect Security Advisor to report the intentional authenticated
+    `SECURITY DEFINER` rate-limit RPC and Free-tier leaked-password warning.
+    Any additional security warning blocks release.
 
 ## Vercel release gate
 
-1. Import the public GitHub repository into a new project under the
-   `Internship OS` team.
-2. Configure Production and Preview separately with:
+1. Keep the public GitHub repository connected to the `internship-os` project
+   under the `Internship OS` team.
+2. Configure each deployable environment separately with:
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL
@@ -71,9 +87,11 @@ APP_ORIGIN
 ```
 
 3. Use a non-production Supabase project for Preview. Do not point public
-   previews at production data.
-4. Deploy Preview first and complete the full browser, authentication,
-   two-account isolation, CSP, cookie, import, and recovery checks.
+   previews at production data. Until one exists, Preview intentionally has no
+   Supabase or Turnstile variables and is not a releasable environment.
+4. When Preview is enabled, deploy there first and complete the full browser,
+   authentication, two-account isolation, CSP, cookie, import, and recovery
+   checks.
 5. Stage WAF rules in log mode, in this order:
    - `/api/auth/login`: 10 requests per 10 minutes per IP
    - `/api/auth/signup`: 5 requests per hour per IP
@@ -81,11 +99,19 @@ APP_ORIGIN
    - `/api/*`: 300 requests per minute per IP
 6. Review Preview traffic, change the actions to HTTP `429`, and publish the
    rules.
-7. Promote the exact verified Preview deployment to Production.
+7. Promote the exact verified Preview deployment to Production when an
+   isolated Preview environment exists. Until then, require CI and verify the
+   production deployment immediately after release.
 8. Inspect Runtime Logs for structured JSON and verify no email, password,
    token, cookie, notes, links, or payment data appears.
 9. Configure Spend Management for $25 metered usage with notifications at
-   50%, 75%, and 100%. Do not automatically pause production.
+   50%, 75%, and 100% after enabling paid metered usage. Do not automatically
+   pause production.
+10. On Vercel Hobby, keep the one available WAF rate-limit rule on
+    `/api/auth/login` at 10 requests per 600 seconds per IP. Turnstile and
+    application/database controls compensate for the unavailable additional
+    WAF rules; do not claim the planned signup, recovery, or general API WAF
+    limits are active.
 
 ## Account and repository gate
 
@@ -94,6 +120,8 @@ APP_ORIGIN
 3. Protect the production branch with required CI and secret-scan checks.
 4. Revoke the legacy GitHub Gist token only after Supabase data is verified.
 5. Require registrar MFA and registrar lock before attaching a custom domain.
+6. Record 2FA/passkey verification as an operator-owned check. Provider access
+   alone is not evidence that MFA is enabled.
 
 ## Backup and restore
 
@@ -115,7 +143,9 @@ After a future upgrade:
 
 ## Rollback
 
-1. Roll back the Vercel production alias to the last known-good deployment.
+1. On Hobby, redeploy the last known-good Git commit and verify the production
+   alias. Use Vercel instant rollback only after a plan that supports it is
+   enabled.
 2. Do not edit an applied database migration. Create a forward corrective
    migration.
 3. If data integrity is compromised, disable mutations at the deployment
